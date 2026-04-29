@@ -14,3 +14,6 @@ lorem ipsum XD
 ## Milestones
 1. lorem
 2. ipsum
+
+![czikapu](https://i.imgflip.com/4367fq.gif)
+
