@@ -16,12 +16,11 @@ The overview covers different platforms, their advantages and downfalls, as well
 ## 6.05.2025
 - Literature review
 - Datasets overview
+  - [CIFAR-10](https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2017.00309/full)
 - Selection of methods for further work
 - Plan for the next milestone
 
-## Milestones
-1. lorem
-2. ipsum
+## 13.05.2025
 
 ![czikapu](https://i.imgflip.com/4367fq.gif)
 
