@@ -1,4 +1,4 @@
-# Use of Spiking Neural Networks for object detection
+# Overview of Spiking Neural Networks frameworks
 
 #### Authors
 - Maria Krzyżowska
@@ -9,7 +9,11 @@
 
 
 ## Project overview
-lorem ipsum XD
+The aim of this project is to compare most popular frameworks for desiging and training SNN.
+
+The overview covers different platforms, their advantages and downfalls, as well as practical compairson of most popular PyTorch frameworks.  
+
+
 
 ## Milestones
 1. lorem
