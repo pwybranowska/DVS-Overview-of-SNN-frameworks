@@ -18,7 +18,9 @@ The overview covers different platforms, their advantages and downfalls, as well
 - Datasets overview
   - [CIFAR-10](https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2017.00309/full)
 - Selection of methods for further work
-- Plan for the next milestone
+- Plan for the next milestone:
+  - Choose frameworks for comparison (everyone gets one to implement)
+  - Theoretical overview/description of each framework
 
 ## 13.05.2025
 
