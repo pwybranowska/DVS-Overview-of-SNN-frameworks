@@ -1,4 +1,4 @@
-# Overview of Spiking Neural Networks frameworks
+# Overview of Spiking Neural Networks frameworks used for object detection
 
 #### Authors
 - Maria Krzyżowska
