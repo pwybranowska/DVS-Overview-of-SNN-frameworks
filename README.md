@@ -16,7 +16,7 @@ The project covers different platforms, their advantages and downfalls, as well 
 ## 6.05.2025
 - [Literature review](https://github.com/pwybranowska/DVS-Overview-of-SNN-frameworks/blob/main/SNN_overwiew.pdf)
 - Datasets overview
-  - [N-Caltech101]([https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2017.00309/full](https://www.garrickorchard.com/datasets/n-caltech101))
+  - [N-Caltech101](https://www.garrickorchard.com/datasets/n-caltech101)
   - [Prophesee's GEN1](https://www.prophesee.ai/2020/01/24/prophesee-gen1-automotive-detection-dataset/)
 - Selection of methods for further work
 - Plan for the next milestone:
