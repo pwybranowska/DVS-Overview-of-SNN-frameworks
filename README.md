@@ -21,6 +21,7 @@ The project covers different platforms, their advantages and downfalls, as well 
 - Plan for the next milestone:
   - Choose frameworks for comparison (everyone gets one to implement)
   - Theoretical overview/description of each framework
+  - criteria for comparison
 
 ## 13.05.2025
 
