@@ -25,6 +25,12 @@ The project covers different platforms, their advantages and downfalls, as well 
   - criteria for comparison
 
 ## 13.05.2025
+Implementation, evaluation and comparison of:
+  - snnTorch (PW)
+  - Norse (JW)
+  - SpikingJelly (MK)
 
+
+## 20.05.2025
 ![czikapu](https://i.imgflip.com/4367fq.gif)
 
