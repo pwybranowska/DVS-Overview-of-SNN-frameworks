@@ -16,7 +16,6 @@ The project covers different platforms, their advantages and downfalls, as well 
 ## 6.05.2025
 - [Literature review](https://github.com/pwybranowska/DVS-Overview-of-SNN-frameworks/blob/main/SNN_overwiew.pdf)
 - Datasets overview
-  - [N-Caltech101](https://www.garrickorchard.com/datasets/n-caltech101)
   - [Prophesee's GEN1](https://www.prophesee.ai/2020/01/24/prophesee-gen1-automotive-detection-dataset/)
 - Selection of methods for further work
 - Plan for the next milestone:
@@ -24,12 +23,18 @@ The project covers different platforms, their advantages and downfalls, as well 
   - Theoretical overview/description of each framework
   - criteria for comparison
 
+
 ## 13.05.2025
-Implementation, evaluation and comparison of:
+- Frameworks for comparison:
   - snnTorch (PW)
   - Norse (JW)
   - SpikingJelly (MK)
-
+- Theoretical overview/description of each framework (report)
+- Comparison method: [Neurobench](https://neurobench.ai/)
+- Plan for the next milestone:
+  - Implementation and evaluation of SNNs
+  - Comparison using Neurobench
+  
 
 ## 20.05.2025
 ![czikapu](https://i.imgflip.com/4367fq.gif)
