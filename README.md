@@ -9,9 +9,7 @@
 
 
 ## Project overview
-The aim of this project is to compare most popular frameworks for desiging and training SNN.
-
-The project covers different platforms, their advantages and downfalls, as well as practical compairson of the most popular PyTorch frameworks.  
+The aim of the project is to compare three PyTorch-based frameworks for designing, trainig and simulating Spiking Neural Networks (SNNs): snnTorch, Norse and SpikingJelly. The developed networks will be evaluated for object detection conducted on an automotive event-based dataset, with performance benchmarks conducted via NeuroBench framework. The most effective architecture will be optimized for deployment on real-time data stream directly from an event camera.  
 
 ## 6.05.2025
 - [Literature review](https://github.com/pwybranowska/DVS-Overview-of-SNN-frameworks/blob/main/SNN_overwiew.pdf)
