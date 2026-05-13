@@ -1,25 +1,13 @@
 """
-gen1_norse_snn.py
------------------
+------------------------------------------------------------------------
 Norse convolutional SNN object detector for the GEN1 EventCube dataset.
 
-Real data format (confirmed from your files):
-  .h5   shape  [1200, 6, 240, 304]  dtype uint8
-  .npy  Prophesee structured array  fields: t, x, y, w, h, class_id, ...
-
-Loading strategy:
-  - Read the h5 cube as uint8  (525 MB on disk, stays uint8 in RAM)
-  - Subsample 1200 timesteps -> NUM_BINS=5 by mean-pooling groups of 240
-  - Cast to float32 and normalise AFTER subsampling  (~9 MB per sample)
-  - Keep all 6 channels (the model in_channels=6)
-
-Dataset layout:
+Dataset:
   download/Gen1EventCubeDataset/
     train/   <name>.h5  +  <name>_bbox.npy
     val/     ...
     test/    ...
-
-All settings live in CONFIG below — no command-line arguments.
+    
 """
 
 import math
@@ -37,9 +25,7 @@ from norse.torch.functional.lif import LIFParameters
 from torchvision.ops import batched_nms
 
 
-# ============================================================
-#  CONFIG  —  edit everything here
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------------------
 CONFIG = {
     # ---- paths ----
     "data_root":  "download/Gen1EventCubeDataset",
@@ -53,8 +39,8 @@ CONFIG = {
     "image_h":    240,
     "image_w":    304,
     "in_channels": 10,  # majority of files have 10 channels; 6-ch files are padded
-    "num_bins":   5,    # we pool 1200 raw timesteps -> 5 bins
-    "num_workers": 2,   # safe value; set to 0 if you still get OOM
+    "num_bins":   5,    # pool 1200 raw timesteps -> 5 bins
+    "num_workers": 2,   
 
     # ---- model ----
     "base_channels": 32,
@@ -86,9 +72,9 @@ CONFIG = {
 CLASS_MAP = {0: 1, 1: 2}
 
 
-# ============================================================
-#  DATASET
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------
+#  Dataset loading
+
 class GEN1Dataset(Dataset):
     """
     Loads [1200, 6, 240, 304] uint8 cubes from .h5 files.
@@ -148,7 +134,7 @@ class GEN1Dataset(Dataset):
         mx = out.max()
         if mx > 0:
             out /= mx
-        return out                     # [T, 10, H, W]  float32
+        return out  # [T, 10, H, W]  float32
 
     def _load_boxes(self, stem: str) -> torch.Tensor:
         """
@@ -197,9 +183,9 @@ def collate_fn(batch):
     return torch.stack(cubes, 0), list(targets), list(stems)
 
 
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------
 #  MODEL
-# ============================================================
+
 
 class ConvSpikeBlock(nn.Module):
     """
@@ -276,9 +262,9 @@ class NorseSpikingSSD(nn.Module):
         return {"loc": loc, "cls": cls}
 
 
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------
 #  ANCHORS
-# ============================================================
+
 
 def generate_anchors(feat_h, feat_w):
     img_h  = CONFIG["image_h"]
@@ -325,9 +311,9 @@ def build_anchors(model, device):
     return anchors[:expected]
 
 
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------
 #  BOX UTILITIES
-# ============================================================
+
 
 def xyxy_to_cxcywh(b):
     x1, y1, x2, y2 = b.unbind(-1)
@@ -351,9 +337,10 @@ def box_iou(a, b):
     return inter / (area_a[:,None] + area_b - inter).clamp(1e-6)
 
 
-# ============================================================
+
+# -------------------------------------------------------------------------------------------------------------------------
 #  ANCHOR MATCHING & BOX ENCODING / DECODING
-# ============================================================
+
 
 def match_and_encode(anchors, gt):
     A       = anchors.shape[0]
@@ -401,9 +388,9 @@ def decode_boxes(anchors, deltas):
     return cxcywh_to_xyxy(torch.stack([cx, cy, w, h], -1))
 
 
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------
 #  LOSS
-# ============================================================
+
 
 class DetectionLoss(nn.Module):
 
@@ -443,9 +430,9 @@ class DetectionLoss(nn.Module):
         return loss, stats
 
 
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------
 #  POST-PROCESSING
-# ============================================================
+
 
 @torch.no_grad()
 def post_process(pred_loc, pred_cls, anchors):
@@ -479,9 +466,9 @@ def post_process(pred_loc, pred_cls, anchors):
     return results
 
 
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------
 #  TRAINING / EVAL LOOPS
-# ============================================================
+
 
 def train_one_epoch(model, loader, anchors, criterion, optimizer, epoch):
     model.train()
@@ -556,9 +543,8 @@ def save_predictions_json(preds, path):
     print(f"Predictions saved -> {path}")
 
 
-# ============================================================
-#  MAIN
-# ============================================================
+# -------------------------------------------------------------------------------------------------------------------------
+
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -567,7 +553,8 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-def main():
+if __name__ == "__main__":
+  
     set_seed(CONFIG["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
@@ -639,7 +626,3 @@ def main():
         save_predictions_json(
             run_inference(model, val_loader, anchors),
             CONFIG["pred_path"])
-
-
-if __name__ == "__main__":
-    main()
