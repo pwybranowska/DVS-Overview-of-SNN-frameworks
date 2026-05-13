@@ -30,8 +30,7 @@ The aim of the project is to compare three PyTorch-based frameworks for designin
 - Theoretical overview/description of each framework (report)
 - Comparison method: [Neurobench](https://neurobench.ai/)
 - Plan for the next milestone:
-  - Implementation and evaluation of SNNs
-  - Comparison using Neurobench
+  - Implementation of SNNs
   
 
 ## 20.05.2025
