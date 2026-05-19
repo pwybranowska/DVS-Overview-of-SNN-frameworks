@@ -28,11 +28,17 @@ The aim of the project is to compare three PyTorch-based frameworks for designin
   - Norse (JW)
   - SpikingJelly (MK)
 - Theoretical overview/description of each framework (report)
-- Comparison method: [Neurobench](https://neurobench.ai/)
+- Comparison method: [NeuroBench](https://neurobench.ai/)
 - Plan for the next milestone:
   - Implementation of SNNs
   
 
 ## 20.05.2025
+- Implementation of SNNs and training
+- Comparing the differences in implementation
+- Plan for the next milestone:
+  - Comparing networks using NeuroBench
+
+## 27.05.2025
 ![czikapu](https://i.imgflip.com/4367fq.gif)
 
