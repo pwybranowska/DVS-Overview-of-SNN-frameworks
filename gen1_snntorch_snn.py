@@ -1,6 +1,6 @@
 """
 ------------------------------------------------------------------------
-Norse convolutional SNN object detector for the GEN1 EventCube dataset.
+SnnTorch convolutional SNN object detector for the GEN1 EventCube dataset.
 
 Dataset:
     download/Gen1EventCubeDataset/
@@ -28,8 +28,8 @@ from torchvision.ops import batched_nms
 CONFIG = {
     # ---- paths ----
     "data_root":  "download/Gen1EventCubeDataset",
-    "ckpt_path":  "norse_gen1_best.pt",
-    "pred_path":  "norse_gen1_predictions.json",
+    "ckpt_path":  "snntorch_gen1_best.pt",
+    "pred_path":  "snntorch_gen1_predictions.json",
 
     # ---- mode ----
     "mode":       "train",   # "train" | "eval" | "infer"
