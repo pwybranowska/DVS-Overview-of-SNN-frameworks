@@ -49,8 +49,9 @@ if __name__ == "__main__":
         dataloader=neurobench_val_loader,
         preprocessors=[],
         postprocessors=[],
-        metric_list=[[Footprint, ConnectionSparsity], 
-                    [ActivationSparsity, SynapticOperations]] # metrics split worload/static!!!!
+        # metrics split static/workload
+        metric_list=[[Footprint, ConnectionSparsity],           # model size in bytes, fraction odf zero weights
+                    [ActivationSparsity, SynapticOperations]]   # fraction of zero activations, average no. synaptic operations
     )
     results = benchmark.run()
     print(results)
