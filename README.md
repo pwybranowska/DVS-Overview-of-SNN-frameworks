@@ -37,7 +37,8 @@ The aim of the project is to compare three PyTorch-based frameworks for designin
 - Implementation of SNNs and training
 - Comparing the differences in implementation
 - Plan for the next milestone:
-  - Comparing networks using NeuroBench
+  - Comparing networks using NeuroBench (PW)
+  - Implementing detection accuracy metrics (IoU - MK)
 
 ## 27.05.2025
 ![czikapu](https://i.imgflip.com/4367fq.gif)
