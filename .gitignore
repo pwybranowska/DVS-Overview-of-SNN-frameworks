@@ -1,0 +1,9 @@
+# Ignore everything
+*
+
+# Allow folders
+!*/
+
+# Keep only this folder
+!folder-to-push/
+!folder-to-push/**
