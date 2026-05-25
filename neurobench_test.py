@@ -10,7 +10,7 @@ from neurobench.metrics.static import (
     Footprint,
     ConnectionSparsity,
 )
-from gen1_snntorch_snn import (
+from snnTorch.gen1_snntorch_snn import (
     SNNTorchSpikingSSD,
     GEN1Dataset,
     CONFIG
