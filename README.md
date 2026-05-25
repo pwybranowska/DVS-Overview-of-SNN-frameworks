@@ -38,8 +38,16 @@ The aim of the project is to compare three PyTorch-based frameworks for designin
 - Comparing the differences in implementation
 - Plan for the next milestone:
   - Comparing networks using NeuroBench (PW)
-  - Implementing detection accuracy metrics (IoU - MK)
+  - Performing evaluation (JW)
+  - Implementing predictions comparisson (MK)
 
 ## 27.05.2025
+- Performing evaluation
+    * cls_loss (Classification Loss) - measures how accurately the model identifies what type of object is inside a bounding box (e.g., distinguishing a pedestrian from a car). A lower score means the model rarely misclassifies objects or confuses them with the background.
+    * box_loss (Bounding Box Loss) - measures how precisely the model predicts where an object is by comparing the coordinates of its predicted boxes against the true boundaries. A lower score means the drawn boxes highly overlap and tightly fit the actual shapes of the objects.
+    * loss (Total Loss) - the overall error metric calculated by summing together the classification and bounding box losses. It serves as the single main score the system tries to minimize during training to improve overall detection performance.
+    * results saved in models-evaluation-results.txt
+ 
+  
 ![czikapu](https://i.imgflip.com/4367fq.gif)
 
