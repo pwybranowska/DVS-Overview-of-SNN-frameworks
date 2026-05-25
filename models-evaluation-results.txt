@@ -1,0 +1,16 @@
+gen1_spikingjelly_detector.py eval:
+Anchors: 6840
+[Dataset] split=val    samples=429
+Validation: {'loss': 0.16679619963246364, 'cls_loss': 0.021283840424277715, 'box_loss': 0.14551235959623698}
+
+
+norse_snn.py eval:
+Anchors: 6840
+[Dataset] split=val    samples=429
+Validation: {'loss': 0.17098363288786522, 'cls_loss': 0.02112566671918991, 'box_loss': 0.14985796648056007}
+
+
+gen1_snntorch_detector.py eval:
+Anchors: 6840
+[Dataset] split=val    samples=429
+Validation: {'loss': 0.17615668565310813, 'cls_loss': 0.023063564552339138, 'box_loss': 0.153093120014226}
