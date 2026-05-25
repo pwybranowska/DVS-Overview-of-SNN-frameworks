@@ -1,13 +1,25 @@
 """
-------------------------------------------------------------------------
+gen1_norse_snn.py
+-----------------
 Norse convolutional SNN object detector for the GEN1 EventCube dataset.
 
-Dataset:
+Real data format (confirmed from your files):
+  .h5   shape  [1200, 6, 240, 304]  dtype uint8
+  .npy  Prophesee structured array  fields: t, x, y, w, h, class_id, ...
+
+Loading strategy:
+  - Read the h5 cube as uint8  (525 MB on disk, stays uint8 in RAM)
+  - Subsample 1200 timesteps -> NUM_BINS=5 by mean-pooling groups of 240
+  - Cast to float32 and normalise AFTER subsampling  (~9 MB per sample)
+  - Keep all 6 channels (the model in_channels=6)
+
+Dataset layout:
   download/Gen1EventCubeDataset/
     train/   <name>.h5  +  <name>_bbox.npy
     val/     ...
     test/    ...
-    
+
+All settings live in CONFIG below — no command-line arguments.
 """
 
 import math
@@ -25,7 +37,9 @@ from norse.torch.functional.lif import LIFParameters
 from torchvision.ops import batched_nms
 
 
-# -------------------------------------------------------------------------------------------------------------------------------------
+# ============================================================
+#  CONFIG  —  edit everything here
+# ============================================================
 CONFIG = {
     # ---- paths ----
     "data_root":  "download/Gen1EventCubeDataset",
@@ -33,14 +47,14 @@ CONFIG = {
     "pred_path":  "norse_gen1_predictions.json",
 
     # ---- mode ----
-    "mode":       "train",   # "train" | "eval" | "infer"
+    "mode":       "infer",   # "train" | "eval" | "infer"
 
     # ---- data ----
     "image_h":    240,
     "image_w":    304,
     "in_channels": 10,  # majority of files have 10 channels; 6-ch files are padded
-    "num_bins":   5,    # pool 1200 raw timesteps -> 5 bins
-    "num_workers": 2,   
+    "num_bins":   5,    # we pool 1200 raw timesteps -> 5 bins
+    "num_workers": 2,   # safe value; set to 0 if you still get OOM
 
     # ---- model ----
     "base_channels": 32,
@@ -49,7 +63,7 @@ CONFIG = {
 
     # ---- training ----
     "epochs":        50,
-    "batch_size":    4,    # each sample is ~9 MB after subsampling -> fine
+    "batch_size":    2,    # each sample is ~9 MB after subsampling -> fine
     "lr":            1e-3,
     "weight_decay":  1e-4,
     "grad_clip":     1.0,
@@ -72,9 +86,9 @@ CONFIG = {
 CLASS_MAP = {0: 1, 1: 2}
 
 
-# -------------------------------------------------------------------------------------------------------------------------
-#  Dataset loading
-
+# ============================================================
+#  DATASET
+# ============================================================
 class GEN1Dataset(Dataset):
     """
     Loads [1200, 6, 240, 304] uint8 cubes from .h5 files.
@@ -92,12 +106,20 @@ class GEN1Dataset(Dataset):
         if not self.dir.exists():
             raise FileNotFoundError(f"Split directory not found: {self.dir}")
 
-        self.samples = sorted([
+        all_h5 = sorted([
             p.stem for p in self.dir.glob("*.h5")
             if not p.stem.endswith("_bbox")
         ])
+        # Keep only samples that have a matching _bbox.npy
+        self.samples = [
+            stem for stem in all_h5
+            if (self.dir / f"{stem}_bbox.npy").exists()
+        ]
+        skipped = len(all_h5) - len(self.samples)
+        if skipped:
+            print(f"[Dataset] split={split:5s}  skipped {skipped} samples (missing _bbox.npy)")
         if not self.samples:
-            raise FileNotFoundError(f"No .h5 files in {self.dir}")
+            raise FileNotFoundError(f"No complete samples in {self.dir}")
 
         print(f"[Dataset] split={split:5s}  samples={len(self.samples)}")
 
@@ -106,35 +128,38 @@ class GEN1Dataset(Dataset):
 
     def _load_cube(self, stem: str) -> np.ndarray:
         """
-        Load .h5, subsample T -> num_bins, pad C -> 10, return float32 [T, 10, H, W].
+        Load ONLY 5 frames from the .h5 file — never the full 525 MB cube.
+
+        h5py supports list indexing which reads only the requested rows from
+        disk, so RAM usage is ~4 MB per sample instead of 525 MB.
 
         Dataset has mixed shapes:
           [~1200, 10, 240, 304]  -- majority (87% of files)
           [~1200,  6, 240, 304]  -- minority (padded to 10 with zeros)
-          T also varies (593-1200), so we use evenly-spaced index sampling
-          instead of reshape (which requires exact divisibility).
+          T also varies (593-1200), handled by linspace.
         """
         with h5py.File(self.dir / f"{stem}.h5", "r") as f:
-            key  = list(f.keys())[0]
-            cube = f[key][:]          # uint8 [T_full, C, H, W]
+            key    = list(f.keys())[0]
+            T_full = f[key].shape[0]
+            C      = f[key].shape[1]
 
-        T_full, C, H, W = cube.shape
-        T = self.num_bins
+            # Pick 5 evenly-spaced frame indices
+            indices = np.linspace(0, T_full - 1, self.num_bins, dtype=int).tolist()
 
-        # Evenly-spaced temporal subsampling (works for any T_full)
-        indices = np.linspace(0, T_full - 1, T, dtype=int)
-        out = cube[indices].astype(np.float32)   # [T, C, H, W]
+            # Read ONLY those 5 frames from disk  ->  [5, C, H, W] uint8
+            out = f[key][indices].astype(np.float32)
 
         # Pad channel dim to 10 so all samples have the same shape
         if C < 10:
+            T, _, H, W = out.shape
             pad = np.zeros((T, 10 - C, H, W), dtype=np.float32)
-            out = np.concatenate([out, pad], axis=1)   # [T, 10, H, W]
+            out = np.concatenate([out, pad], axis=1)   # [5, 10, H, W]
 
         # Normalise to [0, 1]
         mx = out.max()
         if mx > 0:
             out /= mx
-        return out  # [T, 10, H, W]  float32
+        return out                     # [5, 10, H, W]  float32
 
     def _load_boxes(self, stem: str) -> torch.Tensor:
         """
@@ -183,19 +208,14 @@ def collate_fn(batch):
     return torch.stack(cubes, 0), list(targets), list(stems)
 
 
-# -------------------------------------------------------------------------------------------------------------------------
+# ============================================================
 #  MODEL
-
+# ============================================================
 
 class ConvSpikeBlock(nn.Module):
     """
     Conv2d (applied per-timestep) -> BatchNorm2d -> LIF
     Input / output shape: [T, B, C, H, W]
-
-    Uses plain nn.Conv2d instead of LConv2d to avoid LConv2d internal
-    permute clashing with our time-first layout.
-    T timesteps are processed in one batched Conv2d call by merging
-    T and B dimensions, then splitting back.
     """
 
     def __init__(self, in_ch: int, out_ch: int, stride: int = 1):
@@ -203,16 +223,31 @@ class ConvSpikeBlock(nn.Module):
         self.conv = nn.Conv2d(in_ch, out_ch, kernel_size=3,
                               stride=stride, padding=1, bias=False)
         self.bn   = nn.BatchNorm2d(out_ch)
-        self.lif  = LIF(p=LIFParameters())
+        
+        # Initialize without hardcoding parameters so we can intercept them
+        self.lif  = LIF()
 
     def forward(self, x):
+        # FIX: Intercept Norse's default CPU parameters and dynamically 
+        # move them to the GPU to prevent RuntimeError device mismatches.
+        if isinstance(self.lif.p.tau_mem_inv, torch.Tensor) and self.lif.p.tau_mem_inv.device != x.device:
+            p_dict = {
+                k: (v.to(x.device) if isinstance(v, torch.Tensor) else v)
+                for k, v in self.lif.p._asdict().items()
+            }
+            self.lif.p = LIFParameters(**p_dict)
+
         # x: [T, B, C, H, W]
         T, B, C, H, W = x.shape
+        
         # merge T into batch -> conv+bn -> split back
         x = x.reshape(T * B, C, H, W)
         x = self.bn(self.conv(x))       # [T*B, C_out, H_out, W_out]
         _, Co, Hh, Ww = x.shape
+        
         x = x.reshape(T, B, Co, Hh, Ww)
+        
+        # Norse's LIF now safely computes over the time dimension
         x, _ = self.lif(x)
         return x
 
@@ -262,9 +297,9 @@ class NorseSpikingSSD(nn.Module):
         return {"loc": loc, "cls": cls}
 
 
-# -------------------------------------------------------------------------------------------------------------------------
+# ============================================================
 #  ANCHORS
-
+# ============================================================
 
 def generate_anchors(feat_h, feat_w):
     img_h  = CONFIG["image_h"]
@@ -311,9 +346,9 @@ def build_anchors(model, device):
     return anchors[:expected]
 
 
-# -------------------------------------------------------------------------------------------------------------------------
+# ============================================================
 #  BOX UTILITIES
-
+# ============================================================
 
 def xyxy_to_cxcywh(b):
     x1, y1, x2, y2 = b.unbind(-1)
@@ -337,10 +372,9 @@ def box_iou(a, b):
     return inter / (area_a[:,None] + area_b - inter).clamp(1e-6)
 
 
-
-# -------------------------------------------------------------------------------------------------------------------------
+# ============================================================
 #  ANCHOR MATCHING & BOX ENCODING / DECODING
-
+# ============================================================
 
 def match_and_encode(anchors, gt):
     A       = anchors.shape[0]
@@ -388,9 +422,9 @@ def decode_boxes(anchors, deltas):
     return cxcywh_to_xyxy(torch.stack([cx, cy, w, h], -1))
 
 
-# -------------------------------------------------------------------------------------------------------------------------
+# ============================================================
 #  LOSS
-
+# ============================================================
 
 class DetectionLoss(nn.Module):
 
@@ -430,9 +464,9 @@ class DetectionLoss(nn.Module):
         return loss, stats
 
 
-# -------------------------------------------------------------------------------------------------------------------------
+# ============================================================
 #  POST-PROCESSING
-
+# ============================================================
 
 @torch.no_grad()
 def post_process(pred_loc, pred_cls, anchors):
@@ -466,9 +500,9 @@ def post_process(pred_loc, pred_cls, anchors):
     return results
 
 
-# -------------------------------------------------------------------------------------------------------------------------
+# ============================================================
 #  TRAINING / EVAL LOOPS
-
+# ============================================================
 
 def train_one_epoch(model, loader, anchors, criterion, optimizer, epoch):
     model.train()
@@ -543,8 +577,9 @@ def save_predictions_json(preds, path):
     print(f"Predictions saved -> {path}")
 
 
-# -------------------------------------------------------------------------------------------------------------------------
-
+# ============================================================
+#  MAIN
+# ============================================================
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -553,8 +588,7 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-if __name__ == "__main__":
-  
+def main():
     set_seed(CONFIG["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
@@ -626,3 +660,7 @@ if __name__ == "__main__":
         save_predictions_json(
             run_inference(model, val_loader, anchors),
             CONFIG["pred_path"])
+
+
+if __name__ == "__main__":
+    main()
