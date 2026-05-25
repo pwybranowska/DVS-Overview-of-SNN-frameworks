@@ -5,5 +5,5 @@
 !*/
 
 # Keep only this folder
-!folder-to-push/
-!folder-to-push/**
+!Norse/
+!Norse/**
