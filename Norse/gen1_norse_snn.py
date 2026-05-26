@@ -248,7 +248,10 @@ class ConvSpikeBlock(nn.Module):
         x = x.reshape(T, B, Co, Hh, Ww)
         
         # Norse's LIF now safely computes over the time dimension
-        x, _ = self.lif(x)
+        # x, _ = self.lif(x)
+        # return x
+        result = self.lif(x)
+        x = result[0] if isinstance(result, tuple) else result
         return x
 
 

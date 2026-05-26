@@ -327,6 +327,7 @@ class SpikingJellySSD(nn.Module):
 
     def forward(self, x):
         # [B, T, C, H, W] -> [T, B, C, H, W]
+        functional.reset_net(self)
         x = x.permute(1, 0, 2, 3, 4).contiguous()
 
         x = self.block1(x)
