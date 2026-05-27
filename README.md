@@ -47,8 +47,8 @@ The aim of the project is to compare three PyTorch-based frameworks for designin
     * box_loss (Bounding Box Loss) - measures how precisely the model predicts where an object is by comparing the coordinates of its predicted boxes against the true boundaries. A lower score means the drawn boxes highly overlap and tightly fit the actual shapes of the objects.
     * loss (Total Loss) - the overall error metric calculated by summing together the classification and bounding box losses. It serves as the single main score the system tries to minimize during training to improve overall detection performance.
     * results saved in models-evaluation-results.txt
-- Reserch over GEN1 achived results in literature
-- 
+- Research over GEN1 achived results in literature
+- NeuroBench harness applied to all 3 frameworks. Evaluation includes staic (Footprint, ParameterCount, ConnectionSparsity) and workload metrics (ActivationSparsity, SynapticOperations).
 
  
   
