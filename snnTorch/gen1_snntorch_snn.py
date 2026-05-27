@@ -28,7 +28,8 @@ from torchvision.ops import batched_nms
 CONFIG = {
     # ---- paths ----
     "data_root":  "download/Gen1EventCubeDataset",
-    "ckpt_path":  "snntorch_gen1_best.pt",
+    # "ckpt_path":  "snntorch_gen1_best.pt",
+    "ckpt_path":  "snntorch_gen1_best_v2.pt",
     "pred_path":  "snntorch_gen1_predictions.json",
 
     # ---- mode ----
@@ -37,15 +38,15 @@ CONFIG = {
     # ---- data ----
     "image_h":    240,
     "image_w":    304,
-    "in_channels": 10,  # majority of files have 10 channels; 6-ch files are padded
-    "num_bins":   5,    # pool 1200 raw timesteps -> 5 bins
+    "in_channels": 10,
+    "num_bins":   5,
     "num_workers": 2,   
 
     # ---- model ----
     "base_channels": 32,
     "num_classes":   3,    # 0=background  1=car  2=pedestrian
     "num_anchors":   6,
-    "lif_beta":      0.9,   # membrane decay
+    "lif_beta":      0.75,   # membrane decay init value
 
     # ---- training ----
     "epochs":        2,
@@ -191,17 +192,9 @@ class ConvSpikeBlock(nn.Module):
     Conv2d (applied per-timestep) -> BatchNorm2d -> LIF
     Input / output shape: [T, B, C, H, W]
 
-    Uses plain nn.Conv2d instead of LConv2d to avoid LConv2d internal
-    permute clashing with our time-first layout.
-    T timesteps are processed in one batched Conv2d call by merging
-    T and B dimensions, then splitting back.
-
-    snnTorch difference:
-        - snn.Leaky is instantiated with a fixed beta decay factor.
-        - Membrane potential (mem) initialised with lif.init_leaky()
-        at the start of each sequence and manually stepped for each t.
-        - Loop over T inside forward() instead of passing the whole [T, B, C, H, W] 
-        tensor to the neuron at once.
+    Membrane potential (mem) initialised with lif.init_leaky()
+    at the start of each sequence and manually stepped for each t.
+    Loop over T inside forward() instead of passing the whole [T, B, C, H, W] tensor to the neuron at once.
     
     """
     def __init__(self, in_ch: int, out_ch: int, stride: int = 1):
@@ -216,7 +209,9 @@ class ConvSpikeBlock(nn.Module):
         self.lif  = snn.Leaky(
             beta=CONFIG["lif_beta"],
             spike_grad=spike_grad,
-            init_hidden=False,
+            init_hidden=False, 
+            # init_hidden=True,
+            learn_beta=True
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -226,6 +221,7 @@ class ConvSpikeBlock(nn.Module):
         # Initialise membrane potential to zero for this batch
         # init_leaky() returns a zero tensor shaped to match the first input
         mem = self.lif.init_leaky()     # scalar 0 – will broadcast on first step
+        # self.lif.init_hidden = True
 
         spike_seq = []
         for t in range(T):
