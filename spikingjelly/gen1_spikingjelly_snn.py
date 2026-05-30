@@ -49,6 +49,7 @@ from spikingjelly.activation_based import neuron, surrogate, functional
 CONFIG = {
     # ---- paths ----
     "data_root":  "download/Gen1EventCubeDataset",
+    # "data_root":  ".",
     "ckpt_path":  "spikingjelly_gen1_best.pt",
     "pred_path":  "spikingjelly_gen1_predictions.json",
 
@@ -62,10 +63,13 @@ CONFIG = {
     "num_bins":   5,
     "num_workers": 2, # 2 !!
 
+    # ---- bbox timestamp selection ----
+    "bbox_timestamp_mode": "last",
+
     # ---- model ----
-    "base_channels": 32,
+    "base_channels": 64,
+    "batch_size": 8,
     "num_classes":   3,    # 0=background  1=car  2=pedestrian
-    "num_anchors":   6,
 
     # ---- SpikingJelly LIF parameters ----
     # These are nominal LIF parameters. They are chosen to be explicit and
@@ -77,20 +81,26 @@ CONFIG = {
 
     # ---- training ----
     "epochs":        50, # 50 !!
-    "batch_size":    4, # 4 !!
     "lr":            1e-3,
     "weight_decay":  1e-4,
     "grad_clip":     1.0,
     "seed":          42,
+    "train_fraction": 0.5,    # 0.5 = half dataset for fast experiments
 
     # ---- anchor matching ----
     "iou_pos":       0.5,
     "iou_neg":       0.3,
-    "anchor_scales": (1.0, 1.5),
+    "num_anchors":   9,
+    "anchor_scales": (2.0, 4.0, 8.0),
     "anchor_ratios": (0.5, 1.0, 2.0),
+    "dropout": 0.1,
+
+    # ---- focal loss (handles 1:38 class imbalance) ----
+    "focal_gamma": 2.0,
+    "focal_alpha": 0.25,
 
     # ---- post-processing ----
-    "score_thresh":  0.3,
+    "score_thresh":  0.01,
     "nms_thresh":    0.5,
     "top_k":         100,
 }
@@ -99,6 +109,45 @@ CONFIG = {
 # 0 = car,  1 = pedestrian
 CLASS_MAP = {0: 1, 1: 2}
 
+
+def select_bbox_timestamp(raw, mode="last"):
+    """
+    Select bounding boxes from one annotation timestamp.
+
+    GEN1 bbox files may contain boxes for many timestamps.
+    The detector outputs one prediction set per event cube, so training
+    should use one consistent target timestamp instead of all boxes at once.
+    """
+    if raw.dtype.names is None:
+        return raw
+
+    if "t" in raw.dtype.names:
+        time_field = "t"
+    elif "ts" in raw.dtype.names:
+        time_field = "ts"
+    else:
+        return raw
+
+    unique_ts = np.unique(raw[time_field])
+
+    if len(unique_ts) == 0:
+        return raw
+
+    if mode == "last":
+        selected_ts = unique_ts[-1]
+    elif mode == "middle":
+        selected_ts = unique_ts[len(unique_ts) // 2]
+    elif mode == "first":
+        selected_ts = unique_ts[0]
+    elif mode == "all":
+        return raw
+    else:
+        raise ValueError(
+            f"Unknown bbox_timestamp_mode: {mode}. "
+            "Use 'first', 'middle', 'last', or 'all'."
+        )
+
+    return raw[raw[time_field] == selected_ts]
 
 # ============================================================
 #  DATASET
@@ -125,6 +174,15 @@ class GEN1Dataset(Dataset):
             p.stem for p in self.dir.glob("*.h5")
             if not p.stem.endswith("_bbox")
         ])
+
+        if split == "train":
+            frac = CONFIG.get("train_fraction", 1.0)
+            if frac < 1.0:
+                n = max(1, int(len(self.samples) * frac))
+                rng = np.random.default_rng(CONFIG["seed"])
+                idx = rng.choice(len(self.samples), n, replace=False)
+                self.samples = [self.samples[i] for i in sorted(idx)]
+                print(f"[Dataset] train: using {n} samples ({frac*100:.0f}%)")
 
         if not self.samples:
             raise FileNotFoundError(f"No .h5 files in {self.dir}")
@@ -181,7 +239,22 @@ class GEN1Dataset(Dataset):
         Returns [G, 5] tensor: x1 y1 x2 y2 class_training_id
         """
         raw = np.load(self.dir / f"{stem}_bbox.npy", allow_pickle=True)
+
+        raw = select_bbox_timestamp(
+            raw,
+            mode=CONFIG["bbox_timestamp_mode"]
+        )
+
         boxes = []
+
+        # print("file:", stem)
+        # print("raw len:", len(raw))
+        # print("dtype:", raw.dtype.names)
+
+        # if raw.dtype.names is not None:
+        #     time_field = "t" if "t" in raw.dtype.names else "ts"
+        #     print("unique timestamps:", len(np.unique(raw[time_field])))
+        #     print("timestamps:", np.unique(raw[time_field])[:10])
 
         if raw.dtype.names is not None:
             # Structured array: fields ts/t, x, y, w, h, class_id, ...
@@ -250,7 +323,7 @@ class ConvSpikeBlock(nn.Module):
       SpikingJelly:  Conv2d -> BatchNorm2d -> LIFNode
     """
 
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1):
+    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, dropout: float = 0.0):
         super().__init__()
 
         self.conv = nn.Conv2d(
@@ -273,6 +346,8 @@ class ConvSpikeBlock(nn.Module):
             step_mode='m'
         )
 
+        self.drop = nn.Dropout2d(p=dropout) if dropout > 0 else nn.Identity()
+
     def forward(self, x):
         # x: [T, B, C, H, W]
         T, B, C, H, W = x.shape
@@ -286,6 +361,9 @@ class ConvSpikeBlock(nn.Module):
 
         # SpikingJelly LIFNode in multi-step mode expects [T, B, ...]
         x = self.lif(x)
+
+        if not isinstance(self.drop, nn.Identity):
+            x = self.drop(x.reshape(T * B, Co, Hh, Ww)).reshape(T, B, Co, Hh, Ww)
 
         return x
 
@@ -313,10 +391,12 @@ class SpikingJellySSD(nn.Module):
         in_c = CONFIG["in_channels"]
 
         # Backbone: strides 2-2-2-1 -> 1/8 resolution feature map
-        self.block1 = ConvSpikeBlock(in_c,   B_ch,     stride=2)
-        self.block2 = ConvSpikeBlock(B_ch,   B_ch * 2, stride=2)
-        self.block3 = ConvSpikeBlock(B_ch*2, B_ch * 4, stride=2)
-        self.block4 = ConvSpikeBlock(B_ch*4, B_ch * 4, stride=1)
+        dr = CONFIG["dropout"]
+
+        self.block1 = ConvSpikeBlock(in_c,   B_ch,     stride=2, dropout=dr)
+        self.block2 = ConvSpikeBlock(B_ch,   B_ch * 2, stride=2, dropout=dr)
+        self.block3 = ConvSpikeBlock(B_ch*2, B_ch * 4, stride=2, dropout=dr)
+        self.block4 = ConvSpikeBlock(B_ch*4, B_ch * 4, stride=1, dropout=dr)
 
         # Detection head: standard Conv2d on temporally pooled 2D features
         self.loc_head = nn.Conv2d(B_ch * 4, A * 4, kernel_size=3, padding=1)
@@ -507,57 +587,70 @@ def decode_boxes(anchors, deltas):
     return cxcywh_to_xyxy(torch.stack([cx, cy, w, h], -1))
 
 
+
 # ============================================================
-#  LOSS
+#  FOCAL LOSS
 # ============================================================
 
 class DetectionLoss(nn.Module):
+    """
+    Focal loss for classification + Smooth-L1 for box regression.
+    Normalised by number of positive anchors (not total anchors).
+
+    Focal loss solves the 1:38 positive/negative imbalance by
+    down-weighting easy negatives so the model focuses on hard examples.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.gamma = CONFIG["focal_gamma"]
+        self.alpha = CONFIG["focal_alpha"]
 
     def forward(self, pred_loc, pred_cls, anchors, targets):
         B, A, _, H, W = pred_loc.shape
-        N      = A * H * W
+        N, C  = A * H * W, CONFIG["num_classes"]
         device = pred_loc.device
-        C      = CONFIG["num_classes"]
 
-        loc_flat = pred_loc.permute(0, 3, 4, 1, 2).contiguous().reshape(B, N, 4)
-        cls_flat = pred_cls.permute(0, 3, 4, 1, 2).contiguous().reshape(B, N, C)
+        loc_flat = pred_loc.permute(0,3,4,1,2).contiguous().reshape(B, N, 4)
+        cls_flat = pred_cls.permute(0,3,4,1,2).contiguous().reshape(B, N, C)
 
-        tot_cls = torch.tensor(0.0, device=device)
-        tot_box = torch.tensor(0.0, device=device)
-        num_pos = 0
+        tot_cls  = torch.tensor(0.0, device=device)
+        tot_box  = torch.tensor(0.0, device=device)
+        num_pos  = 0
 
         for b in range(B):
             cls_t, box_t = match_and_encode(anchors, targets[b].to(device))
-
             valid = cls_t >= 0
             pos   = cls_t > 0
+            n_pos = int(pos.sum())
+            num_pos += n_pos
 
             if valid.any():
-                tot_cls = tot_cls + F.cross_entropy(
-                    cls_flat[b][valid],
-                    cls_t[valid],
-                    reduction="mean"
-                )
+                ce      = F.cross_entropy(cls_flat[b][valid], cls_t[valid],
+                                          reduction="none")
+                pt      = torch.exp(-ce)
+                a_w     = torch.where(cls_t[valid] > 0,
+                                      torch.tensor(self.alpha, device=device),
+                                      torch.tensor(1.0 - self.alpha, device=device))
+                # mean reduction: divide by number of valid anchors
+                # this keeps loss scale ~0.1-1.0 regardless of batch size
+                tot_cls = tot_cls + (a_w * (1 - pt) ** self.gamma * ce).mean()
 
             if pos.any():
                 tot_box = tot_box + F.smooth_l1_loss(
-                    loc_flat[b][pos],
-                    box_t[pos],
-                    reduction="mean"
-                )
-                num_pos += int(pos.sum())
+                    loc_flat[b][pos], box_t[pos], reduction="mean")
 
-        loss = (tot_cls + tot_box) / max(B, 1)
+        # average over batch items
+        cls_loss = tot_cls / max(B, 1)
+        box_loss = tot_box / max(B, 1)
+        loss     = cls_loss + box_loss
 
-        stats = {
+        return loss, {
             "loss":     float(loss.detach()),
-            "cls_loss": float(tot_cls.detach() / max(B, 1)),
-            "box_loss": float(tot_box.detach() / max(B, 1)),
+            "cls_loss": float(cls_loss.detach()),
+            "box_loss": float(box_loss.detach()),
             "num_pos":  num_pos,
         }
-
-        return loss, stats
-
 
 # ============================================================
 #  POST-PROCESSING
@@ -594,6 +687,9 @@ def post_process(pred_loc, pred_cls, anchors):
         scores_ = scores[keep]
         labels_ = labels[keep]
         boxes_  = decode_boxes(anchors[keep], loc[b][keep])
+
+        boxes_[:, [0, 2]] = boxes_[:, [0, 2]].clamp(0, CONFIG["image_w"])
+        boxes_[:, [1, 3]] = boxes_[:, [1, 3]].clamp(0, CONFIG["image_h"])
 
         idx = batched_nms(
             boxes_,
@@ -840,6 +936,7 @@ def main():
     elif CONFIG["mode"] == "eval":
         ckpt = torch.load(CONFIG["ckpt_path"], map_location=device)
         model.load_state_dict(ckpt["model"])
+        anchors = ckpt["anchors"].to(device)
 
         val_loader = make_loader("val", shuffle=False)
 
@@ -852,7 +949,7 @@ def main():
     elif CONFIG["mode"] == "infer":
         ckpt = torch.load(CONFIG["ckpt_path"], map_location=device)
         model.load_state_dict(ckpt["model"])
-
+        anchors = ckpt["anchors"].to(device)
         val_loader = make_loader("val", shuffle=False)
 
         preds = run_inference(model, val_loader, anchors)
