@@ -629,7 +629,7 @@ def main():
 
         for epoch in range(1, CONFIG["epochs"] + 1):
             tr = train_one_epoch(model, train_loader, anchors,
-                                 criterion, optimizer, epoch)
+                                criterion, optimizer, epoch)
             va = eval_one_epoch(model, val_loader, anchors, criterion)
             scheduler.step()
 
@@ -645,7 +645,7 @@ def main():
                 best_val = va["loss"]
                 torch.save({"epoch": epoch, "model": model.state_dict(),
                             "anchors": anchors.cpu(), "config": CONFIG},
-                           CONFIG["ckpt_path"])
+                            CONFIG["ckpt_path"])
                 print(f"  Checkpoint saved -> {CONFIG['ckpt_path']}")
 
     # ---- EVAL ----

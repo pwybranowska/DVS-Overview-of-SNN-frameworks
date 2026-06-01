@@ -102,7 +102,7 @@ if __name__ == "__main__":
             preprocessors=[],
             postprocessors=[],
             # metrics split static/workload
-            metric_list=[[Footprint, ParameterCount, ConnectionSparsity],           # model size in bytes, fraction odf zero weights
+            metric_list=[[Footprint, ParameterCount, ConnectionSparsity],           # model size in bytes, fraction of zero weights
                         [ActivationSparsity, SynapticOperations]]   # fraction of zero activations, average no. synaptic operations
         )
         all_results[model_name] = benchmark.run()
