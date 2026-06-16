@@ -16,8 +16,9 @@ from snnTorch.gen1_snntorch_snn import (
     SNNTorchSpikingSSD,
     GEN1Dataset
     )
-from Norse.gen1_norse_snn import (
-    NorseSpikingSSD
+from Norse.norse_final import (
+    NorseSpikingSSD,
+    ConvSpikeBlock
 )
 from SpikingJelly.gen1_spikingjelly_snn import (
     SpikingJellySSD
@@ -37,31 +38,9 @@ def neurobench_collate(batch):
     cubes, targets, _stems = zip(*batch)
     return torch.stack(cubes, 0), list(targets)
 
-class NorseLIFWrapper(nn.Module):
-    def __init__(self, lif):
-        super().__init__()
-        self.lif = lif
-
-    @property
-    def p(self):
-        return self.lif.p
-
-    def forward(self, x):
-        spikes, _ = self.lif(x)
-        return spikes
-
-def patch_norse_model(model):
-    for name, module in model.named_children():
-        if isinstance(module, Norse_LIF):
-            setattr(model, name, NorseLIFWrapper(module))
-        else:
-            patch_norse_model(module)  # recurse into ConvSpikeBlocks
-    return model
-
-
 models_to_test = [
-    ('Norse',       NorseSpikingSSD,    r'Norse\norse_gen1_best.pt',                NorseLIFWrapper),
-    ('snnTorch',    SNNTorchSpikingSSD, r'snnTorch\snntorch_gen1_best.pt',          snnTorch_Leaky),
+    ('Norse',       NorseSpikingSSD,    r'Norse\norse_gen1_final.pt',                ConvSpikeBlock),
+    ('snnTorch',    SNNTorchSpikingSSD, r'snnTorch\snntorch_gen1_final.pt',          snnTorch_Leaky),
     ('SpikingJelly',SpikingJellySSD,    r'SpikingJelly\spikingjelly_gen1_best.pt',  SpikingJelly_BaseNode)
 ]
 
@@ -82,19 +61,14 @@ if __name__ == "__main__":
     )
 
     for model_name, model_cls, ckpt_path, neuron_cls in models_to_test:
-    # model init
+        # model init
         ckpt = torch.load(ckpt_path, map_location="cpu")
         model = model_cls()
         model.load_state_dict(ckpt["model"])
         model.eval()
 
-        if model_name == 'Norse':
-            model = patch_norse_model(model)
-            wrapped = TorchModel(model)
-            wrapped.add_activation_module(NorseLIFWrapper)
-        else:
-            wrapped = TorchModel(model)
-            wrapped.add_activation_module(neuron_cls)
+        wrapped = TorchModel(model)
+        wrapped.add_activation_module(neuron_cls)
 
         benchmark = Benchmark(
             model=wrapped,
@@ -102,9 +76,14 @@ if __name__ == "__main__":
             preprocessors=[],
             postprocessors=[],
             # metrics split static/workload
-            metric_list=[[Footprint, ParameterCount, ConnectionSparsity],           # model size in bytes, fraction of zero weights
-                        [ActivationSparsity, SynapticOperations]]   # fraction of zero activations, average no. synaptic operations
+            metric_list=[[Footprint, ParameterCount, ConnectionSparsity], 
+                         [ActivationSparsity, SynapticOperations]] 
         )
+        
         all_results[model_name] = benchmark.run()
-        print(f'\n{model_name}:\n {all_results[model_name]}\n')
+        result_str = f'\n{model_name}:\n {all_results[model_name]}\n'
+        print(result_str)
+
+        with open("neurobench_results.txt", "a") as f:
+            f.write(result_str)
 
