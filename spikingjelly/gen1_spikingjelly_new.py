@@ -66,7 +66,8 @@ CONFIG = {
     # ---- SpikingJelly LIF parameters ----
     # Matched qualitatively to the provided Norse version with low threshold.
     # Norse uses v_th=0.3. SpikingJelly uses v_threshold directly.
-    "lif_tau":       2.0,
+    "lif_tau_per_block": [2.07, 2.44, 1.95, 2.17],
+    "lif_decay_input": False,
     "lif_threshold": 0.3,
     "lif_reset":     0.0,
     "lif_detach_reset": False,
@@ -241,13 +242,14 @@ class ConvSpikeBlock(nn.Module):
     Input/output: [T, B, C, H, W]
     """
 
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, dropout: float = 0.0):
+    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, dropout: float = 0.0, name: str = "", tau: float = 2.0):
         super().__init__()
         self.conv = nn.Conv2d(in_ch, out_ch, 3, stride=stride, padding=1, bias=False)
         self.bn = nn.BatchNorm2d(out_ch)
 
         self.lif = neuron.LIFNode(
-            tau=CONFIG["lif_tau"],
+            tau=tau,
+            decay_input=CONFIG["lif_decay_input"],
             v_threshold=CONFIG["lif_threshold"],
             v_reset=CONFIG["lif_reset"],
             surrogate_function=surrogate.ATan(),
@@ -291,10 +293,12 @@ class SpikingJellySSD(nn.Module):
         ic = CONFIG["in_channels"]
         dr = CONFIG["dropout"]
 
-        self.block1 = ConvSpikeBlock(ic, B, stride=2, dropout=dr)
-        self.block2 = ConvSpikeBlock(B, B * 2, stride=2, dropout=dr)
-        self.block3 = ConvSpikeBlock(B * 2, B * 4, stride=2, dropout=dr)
-        self.block4 = ConvSpikeBlock(B * 4, B * 4, stride=1, dropout=dr)
+        taus = CONFIG["lif_tau_per_block"]
+
+        self.block1 = ConvSpikeBlock(ic,  B,    stride=2, dropout=dr, name="block1", tau=taus[0])
+        self.block2 = ConvSpikeBlock(B,   B*2,  stride=2, dropout=dr, name="block2", tau=taus[1])
+        self.block3 = ConvSpikeBlock(B*2, B*4,  stride=2, dropout=dr, name="block3", tau=taus[2])
+        self.block4 = ConvSpikeBlock(B*4, B*4,  stride=1, dropout=dr, name="block4", tau=taus[3])
 
         self.loc_head = nn.Conv2d(B * 4, A * 4, 3, padding=1)
         self.cls_head = nn.Conv2d(B * 4, A * C, 3, padding=1)
