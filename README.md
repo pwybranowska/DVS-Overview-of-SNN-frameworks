@@ -5,7 +5,7 @@
 - Julia Wiktorowicz
 - Patrycja Wybranowska
 
-#### Report available [here](https://www.overleaf.com/read/jndkpbfbqgbs#136ad1)
+#### Report available [here](https://github.com/pwybranowska/DVS-Overview-of-SNN-frameworks/blob/main/SNN_overwiew.pdf)
 
 
 ## Project overview
