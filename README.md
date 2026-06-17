@@ -48,9 +48,6 @@ The aim of the project is to compare three PyTorch-based frameworks for designin
     * loss (Total Loss) - the overall error metric calculated by summing together the classification and bounding box losses. It serves as the single main score the system tries to minimize during training to improve overall detection performance.
     * results saved in models-evaluation-results.txt
 - Research over GEN1 achived results in literature
-- NeuroBench harness applied to all 3 frameworks. Evaluation includes staic (Footprint, ParameterCount, ConnectionSparsity) and workload metrics (ActivationSparsity, SynapticOperations).
+- NeuroBench harness applied to all 3 frameworks. Evaluation includes static (Footprint, ParameterCount, ConnectionSparsity) and workload metrics (ActivationSparsity, SynapticOperations).
 
- 
-  
-![czikapu](https://i.imgflip.com/4367fq.gif)
 
