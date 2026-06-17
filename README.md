@@ -5,14 +5,14 @@
 - Julia Wiktorowicz
 - Patrycja Wybranowska
 
-#### Report available [here](https://github.com/pwybranowska/DVS-Overview-of-SNN-frameworks/blob/main/SNN_overwiew.pdf)
+#### Report available [here](https://github.com/pwybranowska/DVS-Overview-of-SNN-frameworks/blob/main/DVS_Overview_of_SNN_frameworks.pdf)
 
 
 ## Project overview
 The aim of the project is to compare three PyTorch-based frameworks for designing, trainig and simulating Spiking Neural Networks (SNNs): snnTorch, Norse and SpikingJelly. The developed networks will be evaluated for object detection conducted on an automotive event-based dataset, with performance benchmarks conducted via NeuroBench framework. The most effective architecture will be optimized for deployment on real-time data stream directly from an event camera.  
 
 ## 6.05.2025
-- [Literature review](https://github.com/pwybranowska/DVS-Overview-of-SNN-frameworks/blob/main/DVS_Overview_of_SNN_frameworks.pdf)
+- [Literature review](https://github.com/pwybranowska/DVS-Overview-of-SNN-frameworks/blob/main/SNN_overwiew.pdf)
 - Datasets overview
   - [Prophesee's GEN1](https://www.prophesee.ai/2020/01/24/prophesee-gen1-automotive-detection-dataset/)
 - Selection of methods for further work
