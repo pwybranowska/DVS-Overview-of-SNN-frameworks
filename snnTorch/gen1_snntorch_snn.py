@@ -1,4 +1,18 @@
-# version with learnable beta param
+"""
+gen1_norse_snn.py
+-----------------
+Norse convolutional SNN object detector for the GEN1 EventCube dataset.
+
+All settings are in CONFIG. No command-line arguments needed.
+
+Key design decisions (for fair cross-framework comparison):
+  - Backbone    : 4x ConvSpikeBlock (Conv2d -> BN -> LIF), strides 2-2-2-1
+  - Neurons     : plain LIF (baseline)
+  - Head        : SSD-style, 6 anchors/cell, 3 classes (bg/car/ped)
+  - Loss        : Focal loss (handles 1:38 pos/neg imbalance)
+  - Anchors     : scales (2,4,8) matching real GEN1 object sizes 11-91px
+  - Post-proc   : softmax -> score thresh -> batched NMS
+"""
 
 import math
 from pathlib import Path
@@ -43,7 +57,7 @@ CONFIG = {
     "lif_threshold": 0.3,
 
     # ---- snnTorch-specific parameter ----
-    "lif_beta":       0.5,       # membrane decay init
+    "lif_beta":       0.9,       # membrane decay init; learned during training
 
     # ---- training ----
     "epochs":         50,
@@ -170,7 +184,7 @@ class GEN1Dataset(Dataset):
 
         # Horizontal flip augmentation (training only)
         if self.augment and np.random.rand() > 0.5:
-            cube = cube[:, :, :, ::-1].copy()   # flip W axis
+            cube = cube[:, :, :, ::-1].copy()  
             if target.shape[0] > 0:
                 W = CONFIG["image_w"]
                 flipped = target.clone()
@@ -206,32 +220,39 @@ class ConvSpikeBlock(nn.Module):
         self.conv = nn.Conv2d(in_ch, out_ch, 3, stride=stride, padding=1, bias=False)
         self.bn   = nn.BatchNorm2d(out_ch)
         self.lif  = snn.Leaky(
-            beta=CONFIG["lif_beta"],           # init value; Norse tau_mem_inv=200 ≈ beta≈0.9
+            beta=CONFIG["lif_beta"], 
             threshold=CONFIG["lif_threshold"],
             spike_grad=spike_grad,
             init_hidden=False,
-            learn_beta=True,    # learnable decay, as requested
+            learn_beta=True,
         )
         self.drop = nn.Dropout2d(p=dropout) if dropout > 0 else nn.Identity()
 
     def forward(self, x):
-        # x: [T, B, C, H, W]
-        T, B, C, H, W = x.shape
+        # [B, T, C, H, W] -> [T, B, C, H, W]
+        x = x.permute(1, 0, 2, 3, 4).contiguous()
 
-        mem = self.lif.init_leaky()   # zero scalar, broadcasts on first step
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.block4(x)
 
-        spike_seq = []
-        for t in range(T):
-            cur      = self.bn(self.conv(x[t]))   # [B, C_out, H_out, W_out]
-            spk, mem = self.lif(cur, mem)
-            spike_seq.append(spk)
+        T, B2, C, Hf, Wf = x.shape
 
-        out = torch.stack(spike_seq, dim=0)        # [T, B, C_out, H_out, W_out]
+        x_flat = x.reshape(T * B2, C, Hf, Wf)
 
-        if not isinstance(self.drop, nn.Identity):
-            T2, B2, Co, Hh, Ww = out.shape
-            out = self.drop(out.reshape(T2 * B2, Co, Hh, Ww)).reshape(T2, B2, Co, Hh, Ww)
-        return out
+        loc_flat = self.loc_head(x_flat)          # [T*B2, A*4, Hf, Wf]
+        cls_flat = self.cls_head(x_flat)           # [T*B2, A*C, Hf, Wf]
+
+        loc_t = loc_flat.reshape(T, B2, self._A * 4, Hf, Wf)
+        cls_t = cls_flat.reshape(T, B2, self._A * self._C, Hf, Wf)
+
+        loc_mean = loc_t.mean(dim=0)
+        cls_mean = cls_t.mean(dim=0)
+
+        loc = loc_mean.reshape(B2, self._A, 4,       Hf, Wf)
+        cls = cls_mean.reshape(B2, self._A, self._C, Hf, Wf)
+        return {"loc": loc, "cls": cls}
 
 
 class SNNTorchSpikingSSD(nn.Module):
